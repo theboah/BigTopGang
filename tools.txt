@@ -1,0 +1,45 @@
+Remove the MCP stuff and instead just access the raw files in the vault directory
+Sub directories of vault apart from the types in types enum are just helpful to organise but not required for function
+Have obsidian class
+Example
+CHARACTER (type)
+	NPC (group)
+		bobothy (article)
+
+
+
+
+Enum types
+CHARACTER
+ITEM
+CREATURE
+FACTION
+LOCATION
+EVENT
+
+
+class Vault
+self.path
+
+#searches in the directory and all subdirectories inside it
+def get_all_article_names() -> [string]
+
+#searches in the type directory and all subdirectories inside it
+def get_all_article_names_for_type(enum type) -> [string] article_names
+
+#Individual article functions
+
+#searches in the type directory and all subdirectories inside it
+def get_article(enum type,string article name) -> string "" or article text
+
+def insert_article(type, name, text) -> boolean
+
+#searches in the type directory and all subdirectories inside it
+def update_article(type,name, newtext) -> boolean
+
+#searches in the type directory and all subdirectories inside it
+def get_links_for_article(type, string article_name)
+
+def _get_articles_in_dir_and_sub_dir(path) -> [string] article_names
+
+

@@ -1,4 +1,5 @@
 langgraph
+langchain-ollama
 sqlalchemy
 groq
 python-dotenv

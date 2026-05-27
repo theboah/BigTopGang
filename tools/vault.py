@@ -3,6 +3,7 @@ from __future__ import annotations
 import enum
 import re
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Iterable, List, Optional, Union
 
 from langchain_core.tools import StructuredTool
@@ -15,6 +16,32 @@ class ArticleType(enum.Enum):
     FACTION = "faction"
     LOCATION = "location"
     EVENT = "event"
+
+
+_INVALID_NAME_CHARS_RE = re.compile(r'[\[\]|<>:"?*]')
+
+
+def sanitize_target_path(name: str) -> Path:
+    if not isinstance(name, str):
+        raise ValueError("Article name must be a string.")
+
+    normalized = name.strip().replace("\\", "/")
+    if not normalized:
+        raise ValueError("Article name cannot be empty.")
+    if "[[" in normalized or "]]" in normalized:
+        raise ValueError("Article name cannot contain wiki-link brackets.")
+    if normalized.startswith("/"):
+        raise ValueError("Article name cannot be absolute.")
+
+    posix = PurePosixPath(normalized)
+    if any(part in ("", ".", "..") for part in posix.parts):
+        raise ValueError("Article name contains invalid path fragments.")
+
+    for part in posix.parts:
+        if _INVALID_NAME_CHARS_RE.search(part):
+            raise ValueError(f"Article name contains invalid characters: {part}")
+
+    return Path(*posix.parts)
 
 
 def _default_vault_root() -> Path:
@@ -34,7 +61,7 @@ def _article_type_root(vault_path: Union[str, Path, None], article_type: Article
 
 
 def _normalize_article_name(article_name: str) -> Path:
-    normalized = Path(article_name)
+    normalized = sanitize_target_path(article_name)
     if normalized.suffix.lower() == ".md":
         normalized = normalized.with_suffix("")
     return normalized
@@ -60,11 +87,38 @@ def _write_markdown_file(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _summary_root(vault_path: Union[str, Path, None]) -> Path:
+    return _vault_root(vault_path) / "Summary"
+
+
+def save_summary(
+    summary_name: str,
+    text: str,
+    vault_path: Optional[str] = None,
+) -> bool:
+    summary_path = _summary_root(vault_path) / _normalize_article_name(summary_name)
+    summary_path = summary_path.with_suffix(".md")
+    _write_markdown_file(summary_path, text)
+    return True
+
+
+def get_all_summary_names(vault_path: Optional[str] = None) -> List[str]:
+    return _get_articles_in_dir_and_sub_dir(_summary_root(vault_path))
+
+
 def _get_articles_in_dir_and_sub_dir(path: Union[str, Path]) -> List[str]:
     root = Path(path)
     if not root.exists():
         return []
-    return sorted(candidate.relative_to(root).with_suffix("").as_posix() for candidate in root.rglob("*.md"))
+    names: list[str] = []
+    for candidate in root.rglob("*.md"):
+        relative_name = candidate.relative_to(root).with_suffix("").as_posix()
+        try:
+            sanitize_target_path(relative_name)
+        except ValueError:
+            continue
+        names.append(relative_name)
+    return sorted(names)
 
 
 def get_all_article_names(vault_path: Optional[str] = None) -> List[str]:
@@ -100,6 +154,19 @@ def insert_article(
     article_path = article_path.with_suffix(".md")
     if article_path.exists():
         return False
+    _write_markdown_file(article_path, text)
+    return True
+
+
+def upsert_article(
+    article_type: ArticleType,
+    name: str,
+    text: str,
+    vault_path: Optional[str] = None,
+) -> bool:
+    article_root = _article_type_root(vault_path, article_type)
+    article_path = article_root / _normalize_article_name(name)
+    article_path = article_path.with_suffix(".md")
     _write_markdown_file(article_path, text)
     return True
 
@@ -157,6 +224,12 @@ insert_article_tool = StructuredTool.from_function(
     description="Create a new markdown article in the vault when it does not already exist.",
 )
 
+upsert_article_tool = StructuredTool.from_function(
+    func=upsert_article,
+    name="upsert_article",
+    description="Create or overwrite a markdown article in the vault.",
+)
+
 update_article_tool = StructuredTool.from_function(
     func=update_article,
     name="update_article",
@@ -167,6 +240,18 @@ get_links_for_article_tool = StructuredTool.from_function(
     func=get_links_for_article,
     name="get_links_for_article",
     description="Return the internal wiki links referenced by a markdown article.",
+)
+
+save_summary_tool = StructuredTool.from_function(
+    func=save_summary,
+    name="save_summary",
+    description="Save a session summary markdown file in the vault Summary folder.",
+)
+
+get_all_summary_names_tool = StructuredTool.from_function(
+    func=get_all_summary_names,
+    name="get_all_summary_names",
+    description="List all markdown summary names in the vault Summary folder.",
 )
 
 
@@ -186,11 +271,20 @@ class Vault:
     def insert_article(self, article_type: ArticleType, name: str, text: str) -> bool:
         return insert_article(article_type, name, text, self.path)
 
+    def upsert_article(self, article_type: ArticleType, name: str, text: str) -> bool:
+        return upsert_article(article_type, name, text, self.path)
+
     def update_article(self, article_type: ArticleType, name: str, newtext: str) -> bool:
         return update_article(article_type, name, newtext, self.path)
 
     def get_links_for_article(self, article_type: ArticleType, article_name: str) -> List[str]:
         return get_links_for_article(article_type, article_name, self.path)
+
+    def save_summary(self, summary_name: str, text: str) -> bool:
+        return save_summary(summary_name, text, self.path)
+
+    def get_all_summary_names(self) -> List[str]:
+        return get_all_summary_names(self.path)
 
     def _get_articles_in_dir_and_sub_dir(self, path) -> List[str]:
         return _get_articles_in_dir_and_sub_dir(path)

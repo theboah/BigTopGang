@@ -1,31 +1,45 @@
 from __future__ import annotations
 
-from typing import Tuple, List
+import json
+from typing import Iterable
 
-from tools.vault import get_all_article_names
+from agents.common import CritiqueResult, SubjectRecord, load_prompt, profile_step, run_structured_ollama
 
 
-def validate_subjects(subjects: List[str]) -> Tuple[List[str], List[str]]:
-    """Return (approved, rejected).
+def _subject_to_dict(subject: SubjectRecord | dict) -> dict:
+    if isinstance(subject, SubjectRecord):
+        return subject.model_dump()
+    return dict(subject)
 
-    Simple heuristic: reject subjects that are stopwords or appear to be too short.
-    Also deduplicate.
-    """
-    stopwords = {"The", "A", "An", "And", "Or", "Of"}
-    approved: list[str] = []
-    rejected: list[str] = []
-    seen = set()
-    for s in subjects:
-        s = s.strip()
-        if not s or len(s) < 3:
-            rejected.append(s)
-            continue
-        if s in seen:
-            rejected.append(s)
-            continue
-        seen.add(s)
-        if s in stopwords:
-            rejected.append(s)
-            continue
-        approved.append(s)
-    return approved, rejected
+
+def validate_subjects(
+    transcript_text: str,
+    subjects: list[SubjectRecord | dict],
+    vault_articles: Iterable[str],
+    max_excerpt_chars: int = 4000,
+) -> CritiqueResult:
+    prompt = load_prompt("searcher_critic_prompt.md")
+    subject_payload = [_subject_to_dict(subject) for subject in subjects]
+    context = {
+        "transcript_excerpt": transcript_text[:max_excerpt_chars],
+        "subjects": subject_payload,
+        "vault_articles": list(vault_articles)[:150],
+    }
+    payload_text = json.dumps(context, indent=2, ensure_ascii=False)
+
+    passed = False
+    message = ""
+    try:
+        with profile_step("searcher.critic_llm"):
+            parsed = run_structured_ollama(f"{prompt}\n\nCONTEXT:\n{payload_text}", CritiqueResult)
+        passed = bool(parsed.passed)
+        message = parsed.message.strip()
+    except Exception as exc:
+        message = f"Critic unavailable: {exc}"
+
+    if not passed:
+        if not message:
+            message = "Extraction rejected by critic."
+        print(f"Searcher critic rejected extraction: {message}")
+
+    return CritiqueResult(passed=passed, message=message)

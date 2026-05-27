@@ -4,10 +4,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 from groq import Groq
 
-from sqlite_tools import create_transcript
-from agents.summariser import summarise_session
+from sqlite_tools import create_transcript, get_transcript
+from agents.summariser import build_summary_markdown, summarise_session
 from agents.searcher import find_subjects
 from agents.contributer import create_jobs_from_subjects, execute_jobs
+from agents.linker import link_articles
+from agents.tagger import tag_articles
+from agents.common import format_profile_summary, reset_profile_events
+from tools.vault import save_summary
 
 
 # takes audio path and returns transcription id
@@ -48,19 +52,52 @@ def find_subjects_step(transcription_id: int):
 
 def contribute_to_vault_step(transcription_id: int, subjects: list):
     jobs = create_jobs_from_subjects(transcription_id, subjects)
+    print(f"Contributor stage built {len(jobs)} approved jobs")
     results = execute_jobs(jobs)
-    return results
+    return jobs, results
+
+
+def link_articles_step(subjects: list[str]):
+    return link_articles(subjects)
+
+
+def tag_articles_step(subjects: list[str]):
+    return tag_articles(subjects)
 
 
 def full_pipeline(audio_path: str):
+    reset_profile_events()
+
     try:
         transcription_id = transcribe_audio(audio_path)
         print(f"Transcribed -> id={transcription_id}")
+        print("Transcription section complete")
+
         summary = summarise_session_step(transcription_id)
         print(f"Summary: {summary.summary[:120]}")
+        print("Summary generation complete")
+
+        transcript_record = get_transcript(transcription_id)
+        summary_markdown = build_summary_markdown(summary, transcript_record.get("source_path"))
+        save_summary(f"session-{transcription_id}", summary_markdown)
+        print("Summary saved")
+
         subjects = find_subjects_step(transcription_id)
-        print(f"Subjects: {subjects}")
-        results = contribute_to_vault_step(transcription_id, subjects)
+        print(f"Subjects: {[subject.subject for subject in subjects]}")
+        print("Subject extraction complete")
+
+        jobs, results = contribute_to_vault_step(transcription_id, subjects)
         print(f"Contribution results: {results}")
+        print("Contribution section complete")
+
+        link_results = link_articles_step([subject.subject for subject in subjects])
+        print(f"Link results: {link_results}")
+        print("Linking section complete")
+
+        tag_results = tag_articles_step([subject.subject for subject in subjects])
+        print(f"Tag results: {tag_results}")
+        print("Tagging section complete")
     except Exception as e:
         print(f"An error occurred: {e}")
+    finally:
+        print(format_profile_summary())

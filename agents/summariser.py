@@ -24,7 +24,7 @@ def summarise_session(transcription_id: int) -> SummaryOutput:
     return summary
 
 
-def build_summary_markdown(summary: SummaryOutput, source_path: str | None = None) -> str:
+def build_summary_markdown(summary: SummaryOutput, source_path: Optional[str] = None) -> str:
     frontmatter_lines = ["---", f"transcription_id: {summary.transcription_id}"]
     if source_path:
         frontmatter_lines.append(f"source_path: {source_path}")

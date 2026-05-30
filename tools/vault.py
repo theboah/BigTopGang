@@ -45,7 +45,7 @@ def sanitize_target_path(name: str) -> Path:
 
 
 def _default_vault_root() -> Path:
-    return Path("vault") / "vault"
+    return Path("vault")
 
 
 def _vault_root(vault_path: Union[str, Path, None]) -> Path:

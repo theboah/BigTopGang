@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "242a648441fe31d8",
+        "id": "73ef24f2708c6a92",
         "type": "tabs",
         "children": [
           {
-            "id": "b7026b2d71436fc3",
+            "id": "f0e07ea73af3d07a",
             "type": "leaf",
             "state": {
               "type": "graph",
@@ -179,11 +179,22 @@
       "bases:Create new base": false
     }
   },
-  "active": "b7026b2d71436fc3",
+  "active": "f0e07ea73af3d07a",
   "lastOpenFiles": [
+    "Untitled 2.canvas",
+    "Characters/Gaslag.md",
+    "Mithundur Elvish Kingdom.md",
+    "Untitled 1.canvas",
+    "Untitled.md",
+    "Untitled.canvas",
+    "Summary/session-4.md",
+    "vault/Summary/session-3.md",
+    "vault/Summary",
+    "vault",
+    "Characters/drow sorcerer.md",
+    "Characters/Izzy.md",
     "Items/Feywild portal.md",
     "Items/[[Items/Feywild portal.md",
-    "Characters/Izzy.md",
     "Items/[[Items",
     "Welcome.md",
     "Summary/session-3.md",
@@ -202,18 +213,11 @@
     "Characters/Aasimar.md",
     "Characters/Krieg.md",
     "Characters/Gaslake.md",
-    "Characters/And Gaslake.md",
-    "Characters/Kumunthul Forest.md",
-    "Characters/Mythendul Elvish Kingdom.md",
-    "Characters/Gaslag.md",
-    "Characters/Big Top Gang.md",
     "Locations",
     "Creatures",
     "Events",
     "Factions",
     "Items",
-    "Characters/Items",
-    "Characters/And Galdane.md",
-    "Characters/Gildane.md"
+    "Characters/Items"
   ]
 }

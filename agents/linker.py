@@ -9,7 +9,7 @@ from agents.linker_critic import validate_links
 from tools.vault import ArticleType, get_all_article_names, get_article, sanitize_target_path, update_article
 
 
-def _article_type_from_folder(folder_name: str) -> ArticleType | None:
+def _article_type_from_folder(folder_name: str) -> Optional[ArticleType]:
     normalized = folder_name.rstrip("/").lower()
     mapping = {
         "characters": ArticleType.CHARACTER,

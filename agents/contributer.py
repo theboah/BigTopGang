@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Iterable, List
+from typing import Dict, Iterable, List, Optional, Union
 
 from agents.common import (
     ContributionJob,
     SubjectRecord,
     build_target_path,
+    load_example,
     load_prompt,
     load_template,
     normalize_article_type_name,
@@ -16,10 +17,12 @@ from agents.common import (
 )
 from agents.contributer_critic import validate_job, validate_jobs
 from sqlite_tools import get_transcript
+from tools.chroma_store import build_semantic_context
+from tools.fandom_wiki import format_wiki_context
 from tools.vault import ArticleType, get_all_article_names, get_all_article_names_for_type, get_article, upsert_article
 
 
-def _subject_from_value(subject: SubjectRecord | dict | str) -> SubjectRecord:
+def _subject_from_value(subject: Union[SubjectRecord, dict, str]) -> SubjectRecord:
     if isinstance(subject, SubjectRecord):
         return subject
     if isinstance(subject, str):
@@ -34,7 +37,7 @@ def _subject_from_value(subject: SubjectRecord | dict | str) -> SubjectRecord:
     )
 
 
-def _resolve_article_type(subject_type: str, target_name: str | None = None) -> ArticleType:
+def _resolve_article_type(subject_type: str, target_name: Optional[str] = None) -> ArticleType:
     if target_name:
         target_name_lower = target_name.lower()
         if target_name_lower.startswith("characters/"):
@@ -52,7 +55,7 @@ def _resolve_article_type(subject_type: str, target_name: str | None = None) -> 
     return ArticleType[normalize_article_type_name(subject_type).upper()]
 
 
-def _find_existing_article(subject: SubjectRecord, existing_articles: Iterable[str]) -> str | None:
+def _find_existing_article(subject: SubjectRecord, existing_articles: Iterable[str]) -> Optional[str]:
     subject_name = subject.subject.strip().lower()
     for article_name in existing_articles:
         normalized = article_name.lower()
@@ -71,6 +74,7 @@ def _build_article_prompt(
     transcript_text: str,
     vault_articles: list[str],
     current_article_text: str,
+    wiki_context: str,
     target_type: ArticleType,
     target_path: str,
 ) -> str:
@@ -78,14 +82,21 @@ def _build_article_prompt(
         prompt = load_prompt("contributer_prompt.md")
         template_name = f"{target_type.value}.md"
         subject_template = load_template(template_name)
+        subject_example = load_example(template_name)
         payload = {
             "transcription_id": transcription_id,
             "subject": subject.model_dump(),
             "target_type": target_type.value,
             "target_path": target_path,
             "article_template": subject_template,
+            "article_example": subject_example,
             "transcript_excerpt": transcript_text[:6000],
             "current_article_text": current_article_text,
+            "semantic_context": build_semantic_context(
+                transcription_id,
+                [subject.subject, subject.evidence, target_type.value, current_article_text[:800]],
+            ),
+            "wiki_context": wiki_context,
         }
         return f"{prompt}\n\nCONTEXT:\n{json.dumps(payload, indent=2, ensure_ascii=False)}"
 
@@ -96,6 +107,7 @@ def _generate_article_content(
     transcript_text: str,
     vault_articles: list[str],
     current_article_text: str,
+    wiki_context: str,
     target_type: ArticleType,
     target_path: str,
 ) -> str:
@@ -105,6 +117,7 @@ def _generate_article_content(
         transcript_text,
         vault_articles,
         current_article_text,
+        wiki_context,
         target_type,
         target_path,
     )
@@ -127,14 +140,16 @@ def _build_job_for_subject(
     subject: SubjectRecord,
     transcript_text: str,
     vault_articles: list[str],
+    wiki_context_by_subject: Optional[Dict[str, List[dict]]] = None,
     max_retries: int = 3,
-) -> dict | None:
+) -> Optional[dict]:
     target_type = _resolve_article_type(subject.subject_type, subject.matched_article)
     typed_articles = get_all_article_names_for_type(target_type)
     existing_article = _find_existing_article(subject, typed_articles)
     target_path = existing_article or build_target_path(target_type.value, subject.subject)
     current_article_text = ""
     action = "create"
+    wiki_context = format_wiki_context(wiki_context_by_subject or {}, [subject.subject])
 
     if existing_article:
         action = "update"
@@ -153,6 +168,7 @@ def _build_job_for_subject(
                 transcript_text,
                 vault_articles,
                 current_article_text,
+                wiki_context,
                 target_type,
                 target_path,
             )
@@ -176,6 +192,7 @@ def _build_job_for_subject(
             content,
             transcript_text,
             vault_articles,
+            transcription_id=transcription_id,
         )
         if critique.passed:
             return {
@@ -192,7 +209,15 @@ def _build_job_for_subject(
     return None
 
 
-def create_jobs_from_subjects(transcription_id: int, subjects: List[SubjectRecord | dict | str]) -> List[dict]:
+def create_jobs_from_subjects(transcription_id: int, subjects: List[Union[SubjectRecord, dict, str]]) -> List[dict]:
+    return create_jobs_from_subjects_with_wiki_context(transcription_id, subjects, None)
+
+
+def create_jobs_from_subjects_with_wiki_context(
+    transcription_id: int,
+    subjects: List[Union[SubjectRecord, dict, str]],
+    wiki_context_by_subject: Optional[Dict[str, List[dict]]],
+) -> List[dict]:
     transcript = get_transcript(transcription_id)
     transcript_text = transcript.get("text", "")
     existing = get_all_article_names()
@@ -202,7 +227,13 @@ def create_jobs_from_subjects(transcription_id: int, subjects: List[SubjectRecor
         subject = _subject_from_value(subject_value)
         if not subject.subject:
             continue
-        job = _build_job_for_subject(transcription_id, subject, transcript_text, existing)
+        job = _build_job_for_subject(
+            transcription_id,
+            subject,
+            transcript_text,
+            existing,
+            wiki_context_by_subject=wiki_context_by_subject,
+        )
         if job is not None:
             jobs.append(job)
 

@@ -123,7 +123,7 @@ def profile_step(name: str) -> Iterator[None]:
 
 
 def load_prompt(prompt_filename: str) -> str:
-    prompt_dir = Path(__file__).parent / "prompts"
+    prompt_dir = Path(__file__).parent.parent / "prompts"
     candidates = [prompt_dir / prompt_filename]
     if not prompt_filename.endswith(".md"):
         candidates.append(prompt_dir / f"{prompt_filename}.md")
@@ -134,9 +134,16 @@ def load_prompt(prompt_filename: str) -> str:
 
 
 def load_template(template_filename: str) -> str:
-    template_path = Path(__file__).parent.parent / "templates" / template_filename
+    template_path = Path(__file__).parent.parent / "prompts" / "templates" / template_filename
     if template_path.exists():
         return template_path.read_text(encoding="utf-8")
+    return ""
+
+
+def load_example(example_filename: str) -> str:
+    example_path = Path(__file__).parent.parent / "prompts" / "examples" / example_filename
+    if example_path.exists():
+        return example_path.read_text(encoding="utf-8")
     return ""
 
 
@@ -245,7 +252,7 @@ def format_article_catalog(article_names: list[str], limit: int = 120) -> str:
     return "\n".join(f"- {name}" for name in selected)
 
 
-def normalize_article_type_name(value: str | None) -> str:
+def normalize_article_type_name(value: Optional[str]) -> str:
     if not value:
         return ArticleType.CHARACTER.value
 

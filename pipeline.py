@@ -7,10 +7,13 @@ from groq import Groq
 from sqlite_tools import create_transcript, get_transcript
 from agents.summariser import build_summary_markdown, summarise_session
 from agents.searcher import find_subjects
-from agents.contributer import create_jobs_from_subjects, execute_jobs
+from typing import Optional
+
+from agents.contributer import create_jobs_from_subjects_with_wiki_context, execute_jobs
 from agents.linker import link_articles
 from agents.tagger import tag_articles
 from agents.common import format_profile_summary, reset_profile_events
+from tools.fandom_wiki import fetch_wiki_context
 from tools.vault import save_summary
 
 
@@ -50,8 +53,8 @@ def find_subjects_step(transcription_id: int):
     return find_subjects(transcription_id)
 
 
-def contribute_to_vault_step(transcription_id: int, subjects: list):
-    jobs = create_jobs_from_subjects(transcription_id, subjects)
+def contribute_to_vault_step(transcription_id: int, subjects: list, wiki_context_by_subject: Optional[dict] = None):
+    jobs = create_jobs_from_subjects_with_wiki_context(transcription_id, subjects, wiki_context_by_subject)
     print(f"Contributor stage built {len(jobs)} approved jobs")
     results = execute_jobs(jobs)
     return jobs, results
@@ -86,7 +89,10 @@ def full_pipeline(audio_path: str):
         print(f"Subjects: {[subject.subject for subject in subjects]}")
         print("Subject extraction complete")
 
-        jobs, results = contribute_to_vault_step(transcription_id, subjects)
+        wiki_context_by_subject = fetch_wiki_context([subject.subject for subject in subjects])
+        print(f"Wiki context entries: {sum(len(entries) for entries in wiki_context_by_subject.values())}")
+
+        jobs, results = contribute_to_vault_step(transcription_id, subjects, wiki_context_by_subject)
         print(f"Contribution results: {results}")
         print("Contribution section complete")
 

@@ -68,7 +68,7 @@ def find_subjects(transcription_id: int, max_retries: int = 3) -> List[SubjectRe
         candidates = _run_searcher_prompt(transcription_id, text, vault_articles)
 
         with profile_step("searcher.critic_call"):
-            critique = validate_subjects(text, candidates, vault_articles)
+            critique = validate_subjects(text, candidates, vault_articles, transcription_id=transcription_id)
         if critique.passed:
             final_subjects = _dedupe_subjects(candidates)
             break

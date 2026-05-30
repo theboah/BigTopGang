@@ -18,7 +18,16 @@ def create_transcript(text: str, source_path: Optional[str] = None) -> dict:
         session.add(transcript)
         session.flush()
         session.refresh(transcript)
-        return transcript.to_dict()
+        transcript_data = transcript.to_dict()
+
+    try:
+        from tools.chroma_store import index_transcript_record
+
+        index_transcript_record(transcript_data)
+    except Exception as exc:
+        print(f"Transcript semantic index skipped: {exc}")
+
+    return transcript_data
 
 
 def get_transcript(transcription_id: int) -> dict:
@@ -48,7 +57,16 @@ def update_transcript(transcription_id: int, text: str) -> dict:
         transcript.text = text
         session.flush()
         session.refresh(transcript)
-        return transcript.to_dict()
+        transcript_data = transcript.to_dict()
+
+    try:
+        from tools.chroma_store import index_transcript_record
+
+        index_transcript_record(transcript_data)
+    except Exception as exc:
+        print(f"Transcript semantic reindex skipped: {exc}")
+
+    return transcript_data
 
 
 def delete_transcript(transcription_id: int) -> bool:
@@ -57,7 +75,15 @@ def delete_transcript(transcription_id: int) -> bool:
         if transcript is None:
             return False
         session.delete(transcript)
-        return True
+
+    try:
+        from tools.chroma_store import delete_transcript_index
+
+        delete_transcript_index(transcription_id)
+    except Exception as exc:
+        print(f"Transcript semantic delete skipped: {exc}")
+
+    return True
 
 
 create_transcript_tool = StructuredTool.from_function(
